@@ -12,6 +12,7 @@ import {
   ProgressBar,
   Slider,
   Spinner,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -31,7 +32,7 @@ import {
   ErrorCircleRegular,
   FolderOpenRegular
 } from "@fluentui/react-icons";
-import { bootstrapToken, createDirs, createPlan, getStatus, saveToken, uploadFile } from "./api";
+import { bootstrapToken, canCompressUploads, createDirs, createPlan, getStatus, saveToken, uploadFile } from "./api";
 import { pickFolder } from "./fsAccess";
 import { sha256File } from "./hash";
 import type { FolderSnapshot, LogItem, Phase, StatusResponse, UploadTask } from "./types";
@@ -49,6 +50,7 @@ type Metrics = {
   uploadBytes: number;
   uploadedFiles: number;
   uploadedBytes: number;
+  uploadedWireBytes: number;
   createdDirs: number;
 };
 
@@ -64,6 +66,7 @@ const emptyMetrics: Metrics = {
   uploadBytes: 0,
   uploadedFiles: 0,
   uploadedBytes: 0,
+  uploadedWireBytes: 0,
   createdDirs: 0
 };
 
@@ -144,7 +147,7 @@ const useStyles = makeStyles({
   },
   metrics: {
     display: "grid",
-    gridTemplateColumns: "repeat(5, minmax(130px, 1fr))",
+    gridTemplateColumns: "repeat(6, minmax(120px, 1fr))",
     gap: "10px",
     "@media (max-width: 900px)": {
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
@@ -219,6 +222,8 @@ export function App() {
   const [needsToken, setNeedsToken] = useState(false);
   const [tokenText, setTokenText] = useState(() => bootstrapToken());
   const [uploadConcurrency, setUploadConcurrency] = useState(3);
+  const compressionSupported = useMemo(() => canCompressUploads(), []);
+  const [compressUploads, setCompressUploads] = useState(() => canCompressUploads());
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [error, setError] = useState("");
@@ -377,19 +382,25 @@ export function App() {
       if (finalUploads.length > 0) {
         setPhase("uploading");
         await runPool(finalUploads, uploadConcurrency, async (task) => {
-          await uploadFile({
+          const result = await uploadFile({
             path: task.path,
             file: task.file,
             size: task.size,
             modTimeMs: task.modTimeMs,
-            sha256: task.sha256
+            sha256: task.sha256,
+            compress: compressUploads
           });
           setMetrics((prev) => ({
             ...prev,
             uploadedFiles: prev.uploadedFiles + 1,
-            uploadedBytes: prev.uploadedBytes + task.size
+            uploadedBytes: prev.uploadedBytes + task.size,
+            uploadedWireBytes: prev.uploadedWireBytes + (result.wireSize || task.size)
           }));
-          addLog("success", `${reasonText(task.reason)}: ${task.path}`);
+          const saved =
+            result.compressed && result.wireSize > 0
+              ? ` (${formatBytes(result.wireSize)} / ${formatBytes(task.size)})`
+              : "";
+          addLog("success", `${reasonText(task.reason)}: ${task.path}${saved}`);
         });
       }
 
@@ -403,7 +414,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [addLog, status, uploadConcurrency]);
+  }, [addLog, compressUploads, status, uploadConcurrency]);
 
   return (
     <div className={styles.root}>
@@ -451,8 +462,8 @@ export function App() {
                 {status?.baseDir ?? "未连接"}
               </Text>
             </div>
-            <Badge appearance="outline" color={status?.tls ? "success" : "warning"}>
-              {status?.tls ? "HTTPS" : "HTTP"}
+            <Badge appearance="outline" color={status ? "success" : "subtle"}>
+              HTTP
             </Badge>
           </div>
           <ProgressBar value={progress} />
@@ -464,6 +475,7 @@ export function App() {
           <Metric label="哈希校验" value={`${metrics.hashedFiles}/${metrics.hashFiles}`} />
           <Metric label="待上传" value={metrics.uploadFiles ? metrics.uploadFiles.toLocaleString() : "0"} />
           <Metric label="已上传" value={metrics.uploadedBytes ? formatBytes(metrics.uploadedBytes) : "0 B"} />
+          <Metric label="网络传输" value={metrics.uploadedWireBytes ? formatBytes(metrics.uploadedWireBytes) : "0 B"} />
         </section>
 
         <section className={styles.workArea}>
@@ -510,6 +522,17 @@ export function App() {
                     value={uploadConcurrency}
                     onChange={(_, data) => setUploadConcurrency(data.value)}
                     disabled={busy}
+                  />
+                </Field>
+
+                <Divider />
+
+                <Field label="gzip 压缩">
+                  <Switch
+                    checked={compressUploads && compressionSupported}
+                    disabled={busy || !compressionSupported}
+                    label={compressionSupported ? "上传差异文件时压缩" : "当前浏览器不支持"}
+                    onChange={(_, data) => setCompressUploads(data.checked)}
                   />
                 </Field>
 
@@ -565,4 +588,3 @@ function sumUploadBytes(tasks: Map<string, UploadTask>): number {
   }
   return total;
 }
-

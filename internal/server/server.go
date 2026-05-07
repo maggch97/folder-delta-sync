@@ -1,6 +1,7 @@
 package server
 
 import (
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,13 +21,11 @@ const DefaultReadHeaderTimeout = 10 * time.Second
 type Config struct {
 	BaseDir string
 	Token   string
-	TLS     bool
 }
 
 type Server struct {
 	baseDir string
 	token   string
-	tls     bool
 	mux     *http.ServeMux
 }
 
@@ -38,7 +37,6 @@ func New(cfg Config) (*Server, error) {
 	app := &Server{
 		baseDir: baseDir,
 		token:   cfg.Token,
-		tls:     cfg.TLS,
 		mux:     http.NewServeMux(),
 	}
 	app.routes()
@@ -87,7 +85,6 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, StatusResponse{
 		BaseDir: s.baseDir,
 		Auth:    s.token != "",
-		TLS:     s.tls,
 	})
 }
 
@@ -258,6 +255,15 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, compressed, wireCounter, err := uploadBodyReader(r)
+	if err != nil {
+		writeError(w, http.StatusUnsupportedMediaType, err)
+		return
+	}
+	if closer, ok := body.(io.Closer); ok {
+		defer closer.Close()
+	}
+
 	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -275,7 +281,7 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	h := sha256.New()
-	written, copyErr := io.Copy(tmp, io.TeeReader(r.Body, h))
+	written, copyErr := io.Copy(tmp, io.TeeReader(body, h))
 	closeErr := tmp.Close()
 	if copyErr != nil {
 		writeError(w, http.StatusInternalServerError, copyErr)
@@ -304,7 +310,41 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 		_ = os.Chtimes(target, t, t)
 	}
 
-	writeJSON(w, http.StatusOK, UploadResponse{Path: clean, Size: written, SHA256: actualHash})
+	writeJSON(w, http.StatusOK, UploadResponse{
+		Path:       clean,
+		Size:       written,
+		WireSize:   wireCounter.N,
+		Compressed: compressed,
+		SHA256:     actualHash,
+	})
+}
+
+type countingReader struct {
+	R io.Reader
+	N int64
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.R.Read(p)
+	r.N += int64(n)
+	return n, err
+}
+
+func uploadBodyReader(r *http.Request) (io.Reader, bool, *countingReader, error) {
+	wireCounter := &countingReader{R: r.Body}
+	encoding := strings.TrimSpace(strings.ToLower(r.Header.Get("Content-Encoding")))
+	switch encoding {
+	case "", "identity":
+		return wireCounter, false, wireCounter, nil
+	case "gzip", "x-gzip":
+		reader, err := gzip.NewReader(wireCounter)
+		if err != nil {
+			return nil, true, wireCounter, err
+		}
+		return reader, true, wireCounter, nil
+	default:
+		return nil, false, wireCounter, fmt.Errorf("unsupported content-encoding: %s", encoding)
+	}
 }
 
 func replaceFile(src, dst string) error {

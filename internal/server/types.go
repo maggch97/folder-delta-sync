@@ -3,7 +3,6 @@ package server
 type StatusResponse struct {
 	BaseDir string `json:"baseDir"`
 	Auth    bool   `json:"auth"`
-	TLS     bool   `json:"tls"`
 }
 
 type PlanRequest struct {
@@ -66,9 +65,11 @@ type CreateDirsResponse struct {
 }
 
 type UploadResponse struct {
-	Path   string `json:"path"`
-	Size   int64  `json:"size"`
-	SHA256 string `json:"sha256"`
+	Path       string `json:"path"`
+	Size       int64  `json:"size"`
+	WireSize   int64  `json:"wireSize"`
+	Compressed bool   `json:"compressed"`
+	SHA256     string `json:"sha256"`
 }
 
 type ErrorResponse struct {

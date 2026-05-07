@@ -54,6 +54,7 @@ export async function uploadFile(options: {
   size: number;
   modTimeMs: number;
   sha256?: string;
+  compress?: boolean;
 }): Promise<UploadResponse> {
   const params = new URLSearchParams({
     path: options.path,
@@ -63,13 +64,29 @@ export async function uploadFile(options: {
   if (options.sha256) {
     params.set("sha256", options.sha256);
   }
+  const headers = new Headers({
+    "Content-Type": "application/octet-stream"
+  });
+  let body: BodyInit = options.file;
+  let streaming = false;
+  if (options.compress && canCompressUploads() && options.file.size > 0) {
+    const ctor = (window as unknown as { CompressionStream: new (format: "gzip") => CompressionStream })
+      .CompressionStream;
+    body = options.file.stream().pipeThrough(new ctor("gzip")) as unknown as BodyInit;
+    headers.set("Content-Encoding", "gzip");
+    streaming = true;
+  }
+
   return apiFetch<UploadResponse>(`/api/file?${params.toString()}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/octet-stream"
-    },
-    body: options.file
-  });
+    headers,
+    body,
+    ...(streaming ? { duplex: "half" } : {})
+  } as RequestInit & { duplex?: "half" });
+}
+
+export function canCompressUploads(): boolean {
+  return "CompressionStream" in window && typeof File.prototype.stream === "function";
 }
 
 async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -98,4 +115,3 @@ async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   return (await response.json()) as T;
 }
-

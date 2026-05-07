@@ -26,7 +26,6 @@ export type FolderSnapshot = {
 export type StatusResponse = {
   baseDir: string;
   auth: boolean;
-  tls: boolean;
 };
 
 export type PlanRequest = {
@@ -83,6 +82,8 @@ export type CreateDirsResponse = {
 export type UploadResponse = {
   path: string;
   size: number;
+  wireSize: number;
+  compressed: boolean;
   sha256: string;
 };
 
@@ -100,4 +101,3 @@ export type LogItem = {
   level: "info" | "success" | "error";
   text: string;
 };
-

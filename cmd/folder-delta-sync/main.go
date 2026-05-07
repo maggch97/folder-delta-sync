@@ -19,11 +19,8 @@ func main() {
 	var (
 		baseDir   = flag.String("dir", "", "target base directory")
 		listen    = flag.String("listen", ":8787", "listen address")
-		httpOnly  = flag.Bool("http", false, "serve plain HTTP instead of HTTPS")
 		token     = flag.String("token", "", "optional API token")
 		genToken  = flag.Bool("gen-token", false, "generate a temporary API token")
-		certFile  = flag.String("cert", "", "TLS certificate file")
-		keyFile   = flag.String("key", "", "TLS private key file")
 		showAddrs = flag.Bool("addrs", true, "print candidate browser URLs")
 	)
 	flag.Parse()
@@ -51,7 +48,6 @@ func main() {
 	app, err := server.New(server.Config{
 		BaseDir: absBase,
 		Token:   *token,
-		TLS:     !*httpOnly,
 	})
 	if err != nil {
 		log.Fatalf("start server: %v", err)
@@ -63,14 +59,10 @@ func main() {
 		ReadHeaderTimeout: server.DefaultReadHeaderTimeout,
 	}
 
-	scheme := "https"
-	if *httpOnly {
-		scheme = "http"
-	}
 	log.Printf("target dir: %s", absBase)
 	log.Printf("listening: %s", *listen)
 	if *showAddrs {
-		for _, url := range candidateURLs(scheme, *listen, *token) {
+		for _, url := range candidateURLs(*listen, *token) {
 			log.Printf("open: %s", url)
 		}
 	}
@@ -78,21 +70,7 @@ func main() {
 		log.Printf("warning: no API token is configured")
 	}
 
-	if *httpOnly {
-		err = srv.ListenAndServe()
-	} else if *certFile != "" || *keyFile != "" {
-		if *certFile == "" || *keyFile == "" {
-			log.Fatal("-cert and -key must be provided together")
-		}
-		err = srv.ListenAndServeTLS(*certFile, *keyFile)
-	} else {
-		tlsConfig, err := server.SelfSignedTLSConfig()
-		if err != nil {
-			log.Fatalf("create self-signed certificate: %v", err)
-		}
-		srv.TLSConfig = tlsConfig
-		err = srv.ListenAndServeTLS("", "")
-	}
+	err = srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
@@ -106,13 +84,13 @@ func randomToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func candidateURLs(scheme, listen, token string) []string {
+func candidateURLs(listen, token string) []string {
 	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		if strings.HasPrefix(listen, ":") {
 			port = strings.TrimPrefix(listen, ":")
 		} else {
-			return []string{withToken(fmt.Sprintf("%s://%s/", scheme, listen), token)}
+			return []string{withToken(fmt.Sprintf("http://%s/", listen), token)}
 		}
 	}
 	if port == "" {
@@ -153,7 +131,7 @@ func candidateURLs(scheme, listen, token string) []string {
 			continue
 		}
 		seen[h] = true
-		urls = append(urls, withToken(fmt.Sprintf("%s://%s:%s/", scheme, h, port), token))
+		urls = append(urls, withToken(fmt.Sprintf("http://%s:%s/", h, port), token))
 	}
 	return urls
 }
