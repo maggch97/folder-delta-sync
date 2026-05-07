@@ -7,7 +7,7 @@ Folder Delta Sync 是一个面向局域网 Windows 机器的差异文件夹传�
 ## 特性
 
 - 目标端写入，源端浏览器上传
-- 支持 Chrome File System Access API，非安全上下文自动降级到 `webkitdirectory`
+- 使用 Chrome `webkitdirectory` 选择文件夹，适合发布包这类包含 DLL/EXE 的目录
 - SHA-256 强校验，只传差异文件
 - 支持 gzip 上传压缩，服务端解压后写入原始文件
 - 保留上传文件的修改时间

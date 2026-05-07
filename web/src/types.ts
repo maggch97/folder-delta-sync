@@ -20,7 +20,7 @@ export type FolderSnapshot = {
   files: LocalFile[];
   dirs: string[];
   bytes: number;
-  picker: "showDirectoryPicker" | "webkitdirectory";
+  picker: "webkitdirectory";
 };
 
 export type StatusResponse = {

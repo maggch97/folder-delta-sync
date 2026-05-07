@@ -1,66 +1,7 @@
 import type { FolderSnapshot, LocalFile } from "./types";
 
-type BrowserFileHandle = {
-  kind: "file";
-  name: string;
-  getFile(): Promise<File>;
-};
-
-type BrowserDirectoryHandle = {
-  kind: "directory";
-  name: string;
-  entries(): AsyncIterableIterator<[string, BrowserFileHandle | BrowserDirectoryHandle]>;
-};
-
 export async function pickFolder(): Promise<FolderSnapshot> {
-  if ("showDirectoryPicker" in window && window.isSecureContext) {
-    return pickWithDirectoryHandle();
-  }
   return pickWithFileInput();
-}
-
-async function pickWithDirectoryHandle(): Promise<FolderSnapshot> {
-  const picker = (window as unknown as {
-    showDirectoryPicker(options?: { mode?: "read" | "readwrite" }): Promise<BrowserDirectoryHandle>;
-  }).showDirectoryPicker;
-  const root = await picker({ mode: "read" });
-  const files: LocalFile[] = [];
-  const dirs: string[] = [];
-
-  await walkDirectory(root, "", files, dirs);
-  files.sort(comparePath);
-  dirs.sort();
-
-  return {
-    name: root.name,
-    files,
-    dirs,
-    bytes: files.reduce((sum, item) => sum + item.size, 0),
-    picker: "showDirectoryPicker"
-  };
-}
-
-async function walkDirectory(
-  dir: BrowserDirectoryHandle,
-  prefix: string,
-  files: LocalFile[],
-  dirs: string[]
-): Promise<void> {
-  for await (const [name, handle] of dir.entries()) {
-    const relPath = prefix ? `${prefix}/${name}` : name;
-    if (handle.kind === "directory") {
-      dirs.push(relPath);
-      await walkDirectory(handle, relPath, files, dirs);
-      continue;
-    }
-    const file = await handle.getFile();
-    files.push({
-      path: relPath,
-      file,
-      size: file.size,
-      modTimeMs: file.lastModified
-    });
-  }
 }
 
 async function pickWithFileInput(): Promise<FolderSnapshot> {
