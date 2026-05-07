@@ -21,6 +21,8 @@ func main() {
 		listen    = flag.String("listen", ":8787", "listen address")
 		token     = flag.String("token", "", "optional API token")
 		genToken  = flag.Bool("gen-token", false, "generate a temporary API token")
+		certFile  = flag.String("cert", "", "TLS certificate file")
+		keyFile   = flag.String("key", "", "TLS private key file")
 		showAddrs = flag.Bool("addrs", true, "print candidate browser URLs")
 	)
 	flag.Parse()
@@ -48,6 +50,7 @@ func main() {
 	app, err := server.New(server.Config{
 		BaseDir: absBase,
 		Token:   *token,
+		TLS:     true,
 	})
 	if err != nil {
 		log.Fatalf("start server: %v", err)
@@ -70,7 +73,19 @@ func main() {
 		log.Printf("warning: no API token is configured")
 	}
 
-	err = srv.ListenAndServe()
+	if *certFile != "" || *keyFile != "" {
+		if *certFile == "" || *keyFile == "" {
+			log.Fatal("-cert and -key must be provided together")
+		}
+		err = srv.ListenAndServeTLS(*certFile, *keyFile)
+	} else {
+		tlsConfig, err := server.SelfSignedTLSConfig()
+		if err != nil {
+			log.Fatalf("create self-signed certificate: %v", err)
+		}
+		srv.TLSConfig = tlsConfig
+		err = srv.ListenAndServeTLS("", "")
+	}
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
@@ -90,7 +105,7 @@ func candidateURLs(listen, token string) []string {
 		if strings.HasPrefix(listen, ":") {
 			port = strings.TrimPrefix(listen, ":")
 		} else {
-			return []string{withToken(fmt.Sprintf("http://%s/", listen), token)}
+			return []string{withToken(fmt.Sprintf("https://%s/", listen), token)}
 		}
 	}
 	if port == "" {
@@ -131,7 +146,7 @@ func candidateURLs(listen, token string) []string {
 			continue
 		}
 		seen[h] = true
-		urls = append(urls, withToken(fmt.Sprintf("http://%s:%s/", h, port), token))
+		urls = append(urls, withToken(fmt.Sprintf("https://%s:%s/", h, port), token))
 	}
 	return urls
 }

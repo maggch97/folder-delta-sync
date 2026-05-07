@@ -3,6 +3,7 @@ package server
 type StatusResponse struct {
 	BaseDir string `json:"baseDir"`
 	Auth    bool   `json:"auth"`
+	TLS     bool   `json:"tls"`
 }
 
 type PlanRequest struct {

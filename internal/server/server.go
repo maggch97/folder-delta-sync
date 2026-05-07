@@ -21,11 +21,13 @@ const DefaultReadHeaderTimeout = 10 * time.Second
 type Config struct {
 	BaseDir string
 	Token   string
+	TLS     bool
 }
 
 type Server struct {
 	baseDir string
 	token   string
+	tls     bool
 	mux     *http.ServeMux
 }
 
@@ -37,6 +39,7 @@ func New(cfg Config) (*Server, error) {
 	app := &Server{
 		baseDir: baseDir,
 		token:   cfg.Token,
+		tls:     cfg.TLS,
 		mux:     http.NewServeMux(),
 	}
 	app.routes()
@@ -85,6 +88,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, StatusResponse{
 		BaseDir: s.baseDir,
 		Auth:    s.token != "",
+		TLS:     s.tls,
 	})
 }
 

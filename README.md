@@ -13,7 +13,7 @@ Folder Delta Sync 是一个面向局域网 Windows 机器的差异文件夹传�
 - 保留上传文件的修改时间
 - Go 后端内嵌 React 前端，发布时一个 exe
 - 可选 API token
-- 只使用 HTTP，适合可信局域网内使用
+- 默认使用自签 HTTPS，支持 Chrome 流式 gzip 上传
 
 ## 开发环境
 
@@ -43,7 +43,7 @@ npm run dev
 go run ./cmd/folder-delta-sync -dir D:\TargetFolder
 ```
 
-开发时 Vite 会把 `/api` 代理到 `http://localhost:8787`。
+开发时 Vite 会把 `/api` 代理到 `https://localhost:8787`，需要先在浏览器里接受自签证书。
 
 ## 构建单文件 exe
 
@@ -67,7 +67,7 @@ folder-delta-sync.exe -dir D:\TargetFolder -listen :8787 -gen-token
 
 终端会打印可访问 URL。源机器用 Chrome 打开对应地址，选择源文件夹后会自动开始比较和上传。
 
-跨机器 HTTP 页面不是安全上下文，Chrome 会自动使用兼容的文件夹选择方案。页面内可以开启或关闭 gzip 上传压缩；压缩只作用于需要上传的差异文件，不会改变目标端落盘内容。
+第一次打开自签 HTTPS 地址时，Chrome 会提示证书不受信任，需要手动继续访问。页面内可以开启或关闭 gzip 上传压缩；压缩只作用于需要上传的差异文件，不会改变目标端落盘内容。
 
 ## 命令行参数
 
@@ -77,7 +77,8 @@ folder-delta-sync.exe -dir D:\TargetFolder -listen :8787 -gen-token
 | `-listen` | 监听地址，默认 `:8787` |
 | `-token` | 手动指定 API token |
 | `-gen-token` | 启动时生成临时 API token |
+| `-cert` / `-key` | 使用指定 TLS 证书和私钥；不传时自动生成自签证书 |
 
 ## 安全说明
 
-这个程序会写入 `-dir` 指定的目录，并且只提供 HTTP 服务。跨机器使用时建议加 `-gen-token` 或 `-token`，并只在可信局域网中开放端口。
+这个程序会写入 `-dir` 指定的目录。跨机器使用时建议加 `-gen-token` 或 `-token`，并只在可信局域网中开放端口。

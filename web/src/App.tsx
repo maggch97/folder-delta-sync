@@ -462,8 +462,8 @@ export function App() {
                 {status?.baseDir ?? "未连接"}
               </Text>
             </div>
-            <Badge appearance="outline" color={status ? "success" : "subtle"}>
-              HTTP
+            <Badge appearance="outline" color={status?.tls ? "success" : "subtle"}>
+              HTTPS
             </Badge>
           </div>
           <ProgressBar value={progress} />

@@ -26,6 +26,7 @@ export type FolderSnapshot = {
 export type StatusResponse = {
   baseDir: string;
   auth: boolean;
+  tls: boolean;
 };
 
 export type PlanRequest = {
